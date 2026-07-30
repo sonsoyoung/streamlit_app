@@ -1,6 +1,6 @@
 import streamlit as st
 
-# 페이지 기본 설정 (심플하고 넓은 레이아웃)
+# 페이지 기본 설정
 st.set_page_config(
     page_title="MBTI 여행지 추천",
     page_icon="✈️",
@@ -164,7 +164,7 @@ mbti_list = list(MBTI_DESTINATIONS.keys())
 selected_mbti = st.sidebar.selectbox("MBTI를 선택하세요", mbti_list, index=0)
 
 st.sidebar.divider()
-st.sidebar.subheader("🎯 추가 필터 (선택사항)")
+st.sidebar.subheader("🎯 추가 취향 필터")
 pref_category = st.sidebar.radio("선호하는 풍경", ["상관없음", "자연", "도시"])
 pref_style = st.sidebar.radio("선호하는 스타일", ["상관없음", "휴양", "액티비티"])
 
@@ -175,34 +175,43 @@ st.divider()
 
 data = MBTI_DESTINATIONS[selected_mbti]
 
-# 필터링 조건 체크
+# 매칭 여부 판별
 category_match = (pref_category == "상관없음") or (pref_category == data["category"])
 style_match = (pref_style == "상관없음") or (pref_style == data["style"])
+is_perfect_match = category_match and style_match
 
-if category_match and style_match:
-    # 매칭 성공 시 화면 표시
-    col1, col2 = st.columns([1, 1])
-
-    with col1:
-        st.subheader(f"[{selected_mbti}] 당신을 위한 추천")
-        st.header(f"📍 {data['destination']}")
-        st.write(f"**태그:** `{data['tag']}`")
-        st.info(data["desc"])
-
-    with col2:
-        st.subheader("💡 추천 주요 일정 & 팁")
-        st.markdown("**추천 명소 및 활동:**")
-        for spot in data["spots"]:
-            st.markdown(f"- {spot}")
-        
-        st.warning(f"**여행 팁:** {data['tip']}")
-
-    # 하단 추가 안내
-    st.divider()
-    st.success(f"🎉 **{data['destination']}**에서 잊지 못할 추억을 만들어보세요!")
-
+# 상단 상태 알림 (결과를 가리지 않고 친절히 안내만 제공)
+if is_perfect_match:
+    st.success(f"🎯 **[{selected_mbti}]** 추천지인 **{data['destination']}**는 선택하신 취향(**{data['category']} / {data['style']}**)과 완벽히 일치합니다!")
 else:
-    # 필터 불일치 시 안내 메시지
-    st.warning("⚠️ 선택하신 [풍경/스타일] 필터 조건이 해당 MBTI의 대표 추천 유형과 다릅니다.")
-    st.write(f"👉 **{selected_mbti}**의 대표 여행지는 **[{data['category']} / {data['style']}]** 성향인 **{data['destination']}**입니다.")
-    st.write("사이드바의 필터를 '상관없음'으로 변경하시면 상세 내용을 확인하실 수 있습니다!")
+    mismatched = []
+    if not category_match:
+        mismatched.append(f"풍경: {pref_category} ≠ {data['category']}")
+    if not style_match:
+        mismatched.append(f"스타일: {pref_style} ≠ {data['style']}")
+    
+    st.info(f"💡 **[{selected_mbti}]** 대표 추천지는 **[{data['category']} / {data['style']}]** 성향의 **{data['destination']}**입니다.\n\n"
+            f"(선택하신 필터: {', '.join(mismatched)})")
+
+# 추천지 메인 영역 (항상 노출)
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.subheader(f"[{selected_mbti}] 대표 추천")
+    st.header(f"📍 {data['destination']}")
+    
+    # 속성 칩 표시
+    st.markdown(f"**속성:** `{data['category']}` | `{data['style']}`")
+    st.write(f"**태그:** `{data['tag']}`")
+    st.info(data["desc"])
+
+with col2:
+    st.subheader("💡 추천 주요 일정 & 팁")
+    st.markdown("**추천 명소 및 활동:**")
+    for spot in data["spots"]:
+        st.markdown(f"- {spot}")
+    
+    st.warning(f"**여행 팁:** {data['tip']}")
+
+st.divider()
+st.caption("TIP: 사이드바에서 다른 MBTI나 필터를 선택해 자유롭게 비교해 보세요!")
