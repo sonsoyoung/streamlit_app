@@ -4,6 +4,7 @@ import folium
 from streamlit_folium import st_folium
 import plotly.express as px
 import math
+import os
 
 # Page Config
 st.set_page_config(
@@ -30,14 +31,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 1. Data Loading & Preprocessing
+# 1. Robust Data Loading Function
 @st.cache_data
 def load_data():
-    file_path = "서울시 공영주차장 안내 정보.csv"
+    # app.py 가 있는 경로 기준으로 파일 탐색
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    target_filename = "서울시 공영주차장 안내 정보.csv"
+    file_path = os.path.join(current_dir, target_filename)
     
-    # Check encoding (cp949 / euc-kr used for standard Seoul Public Open Data)
+    # 1차 시도: 지정된 파일명 탐색
+    if not os.path.exists(file_path):
+        # 2차 시도: 현재 디렉토리 또는 하위 디렉토리의 첫 번째 csv 파일 탐색
+        csv_candidates = [f for f in os.listdir(current_dir) if f.endswith('.csv')]
+        if csv_candidates:
+            file_path = os.path.join(current_dir, csv_candidates[0])
+        else:
+            st.error(f"❌ '{target_filename}' 파일을 찾을 수 없습니다. GitHub 저장소 루트에 CSV 파일이 올바르게 업로드되었는지 확인해 주세요.")
+            st.stop()
+            
+    # 한국어 CSV 인코딩 시도 (CP949 -> EUC-KR -> UTF-8 순)
     df = None
-    for enc in ['cp949', 'euc-kr', 'utf-8-sig', 'utf-8']:
+    encodings = ['cp949', 'euc-kr', 'utf-8-sig', 'utf-8']
+    
+    for enc in encodings:
         try:
             df = pd.read_csv(file_path, encoding=enc)
             break
@@ -45,7 +61,7 @@ def load_data():
             continue
             
     if df is None:
-        st.error("CSV 파일을 불러올 수 없습니다. 파일명과 위치를 확인해주세요.")
+        st.error("❌ CSV 파일을 읽는 데 실패했습니다 (인코딩 오류). 파일 형식을 확인해 주세요.")
         st.stop()
         
     # Extract Gu from '주소'
@@ -72,7 +88,7 @@ def load_data():
 try:
     df = load_data()
 except Exception as e:
-    st.error(f"데이터 로딩 중 오류가 발생했습니다: {e}")
+    st.error(f"데이터 로딩 중 예외가 발생했습니다: {e}")
     st.stop()
 
 # Header
@@ -86,7 +102,7 @@ st.sidebar.header("🔍 검색 및 필터 옵션")
 gu_list = ["전체"] + sorted([g for g in df['자치구'].unique() if g != '기타']) + ["기타"]
 selected_gu = st.sidebar.selectbox("자치구 선택", gu_list)
 
-# 2. Type Filter (주차장 종류명 / 유무료구분명)
+# 2. Type Filter
 type_col = '주차장 종류명' if '주차장 종류명' in df.columns else '주차장 종류'
 type_list = ["전체"] + sorted([t for t in df[type_col].dropna().unique()]) if type_col in df.columns else ["전체"]
 selected_type = st.sidebar.selectbox("주차장 종류", type_list)
@@ -129,7 +145,6 @@ tab1, tab2, tab3, tab4 = st.tabs(["🗺️ 지도 및 목록", "📊 통계 분�
 with tab1:
     st.subheader("📍 주차장 위치 지도")
     
-    # Filter valid lat/lng rows for map display
     map_df = filtered_df[filtered_df['위도_valid'] & filtered_df['경도_valid']]
     
     if map_df.empty:
@@ -140,7 +155,6 @@ with tab1:
         
         m = folium.Map(location=[center_lat, center_lng], zoom_start=12 if selected_gu == "전체" else 14)
         
-        # Display top 150 markers for smooth performance
         for idx, row in map_df.head(150).iterrows():
             base_f = int(row['기본 주차 요금'])
             base_t = int(row['기본 주차 시간(분 단위)'])
@@ -167,7 +181,6 @@ with tab1:
     show_cols = [c for c in ['주차장명', '자치구', '주차장 종류명', '유무료구분명', '기본 주차 요금', '기본 주차 시간(분 단위)', '추가 단위 요금', '추가 단위 시간(분 단위)', '총 주차면', '전화번호', '주소'] if c in filtered_df.columns]
     st.dataframe(filtered_df[show_cols], use_container_width=True)
     
-    # CSV Download Button
     csv_bytes = filtered_df[show_cols].to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
     st.download_button(
         label="📥 검색 결과 CSV 다운로드",
